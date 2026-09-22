@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -ex
+
+pip list > /results/pip_list.txt
+
+export JAVA_HOME=/opt/conda/lib/jvm
+export PATH="$JAVA_HOME/bin:$PATH"
+export SCYJAVA_DISABLE_JDK_DOWNLOAD=1
+export JAVA_OPTS="--add-opens=java.base/java.lang=ALL-UNNAMED -Xms32g -Xmx32g -Djava.io.tmpdir=/scratch"
+
+python -u run_capsule.py "$@"

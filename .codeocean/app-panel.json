@@ -1,0 +1,26 @@
+{
+	"version": 1,
+	"parameters": [
+		{
+			"id": "spacingum00000001",
+			"name": "spacing_um",
+			"description": "Node spacing in microns, applied to both coordinate spaces (default 10)",
+			"type": "text",
+			"value_type": "string"
+		},
+		{
+			"id": "ccfresolutionum01",
+			"name": "ccf_resolution_um",
+			"description": "CCF annotation resolution in microns (default 10)",
+			"type": "text",
+			"value_type": "string"
+		},
+		{
+			"id": "experimenters00001",
+			"name": "experimenters",
+			"description": "Comma-separated names recorded on this stage",
+			"type": "text",
+			"value_type": "string"
+		}
+	]
+}
