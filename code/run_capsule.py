@@ -28,7 +28,7 @@ from aind_morphology_utils.utils import read_swc
 from aind_morphology_utils.writers import MouseLightJsonWriter
 from exaspim_swc_processing.naming import ReconstructionNameError, parse_stem
 from exaspim_swc_processing.stage import build_stage_process, resolve_code, write_stage_process
-from scale import derive_scale, scale_swc
+from scale import derive_scale, scale_from_acquisition, scale_swc
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 RESULTS_DIR = Path(os.environ.get("RESULTS_DIR", "/results"))
@@ -165,9 +165,14 @@ def resample_specimen_space(spacing_um: float, output_dir: Path) -> dict[str, ob
     world_dir = find_dir("refinement/final-world", "swc_refinement/final-world", "final-world")
     if voxel_dir is None or world_dir is None:
         logger.warning("Specimen-space inputs not found; skipping specimen resampling")
-        return {"specimen_resampled": 0, "voxel_scale_um": None}
+        return {"specimen_resampled": 0, "voxel_scale_um": None, "voxel_scale_source": None}
 
-    scale = derive_scale(*matched_pair(voxel_dir, world_dir))
+    # The transform stage carries acquisition.json forward; prefer it over inference.
+    scale = scale_from_acquisition(DATA_DIR / "alignment" / "acquisition.json")
+    source = "acquisition"
+    if scale is None:
+        scale = derive_scale(*matched_pair(voxel_dir, world_dir))
+        source = "derived"
     staging = SCRATCH_DIR / "specimen_resampled_world"
     resample(world_dir, staging, spacing_um)
 
@@ -178,7 +183,11 @@ def resample_specimen_space(spacing_um: float, output_dir: Path) -> dict[str, ob
         written += 1
     shutil.rmtree(staging, ignore_errors=True)
     logger.info("Resampled %d specimen-space reconstruction(s) at %s um", written, spacing_um)
-    return {"specimen_resampled": written, "voxel_scale_um": list(scale)}
+    return {
+        "specimen_resampled": written,
+        "voxel_scale_um": list(scale),
+        "voxel_scale_source": source,
+    }
 
 
 def id_string(swc_path: Path) -> str:

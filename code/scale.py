@@ -5,15 +5,20 @@ in microns: the voxel grid is anisotropic, so a fixed step in voxels is a differ
 physical distance along each axis.
 
 The scale is a property of the acquisition, recorded in ``acquisition.json`` as a
-``coordinate_transformations`` entry. That file is not mounted into this stage, but both
-the voxel and the world forms of every reconstruction are, so the scale is derived from a
-matched pair instead. That is self-checking: the same ratio must hold on every axis for
-every node, and a disagreement means the two directories are not the same tracing.
+``coordinate_transformations`` entry. The transform stage needs that file for the
+registration and carries it forward, so :func:`scale_from_acquisition` reads it directly.
+
+When it is absent, :func:`derive_scale` recovers the same numbers from a matched
+voxel/world pair, which this stage always has. That fallback is self-checking: the same
+ratio must hold on every axis for every node, and a disagreement means the two
+directories are not the same tracing.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 
 _LOGGER = logging.getLogger(__name__)
@@ -31,6 +36,64 @@ class MalformedSwcError(ValueError):
 
 class ScaleDerivationError(ValueError):
     """Raised when a voxel-to-physical scale cannot be derived from a matched pair."""
+
+
+def scale_from_acquisition(acquisition_json: Path) -> tuple[float, float, float] | None:
+    """Read the voxel-to-physical scale from an acquisition record.
+
+    Parameters
+    ----------
+    acquisition_json : Path
+        The acquisition carried forward by the transform stage.
+
+    Returns
+    -------
+    tuple[float, float, float] | None
+        Microns per voxel along x, y and z, or ``None`` if the file is missing or holds
+        no ``coordinate_transformations`` scale.
+    """
+    if not acquisition_json.is_file():
+        return None
+    try:
+        payload = json.loads(acquisition_json.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        _LOGGER.warning("Could not read %s: %s", acquisition_json, error)
+        return None
+
+    for transform in _iter_transforms(payload):
+        if transform.get("type") == "scale" and len(transform.get("scale", ())) == 3:
+            scale = tuple(float(value) for value in transform["scale"])
+            _LOGGER.info("Read voxel scale %s um from %s", scale, acquisition_json.name)
+            return scale
+    _LOGGER.warning("No coordinate_transformations scale in %s", acquisition_json.name)
+    return None
+
+
+def _iter_transforms(payload: object) -> "Iterator[dict]":
+    """Yield every ``coordinate_transformations`` entry in a nested payload.
+
+    The entries live per-tile inside the acquisition, so the structure is walked rather
+    than indexed at a fixed depth.
+
+    Parameters
+    ----------
+    payload : object
+        Decoded acquisition JSON, at any depth.
+
+    Yields
+    ------
+    dict
+        Each transform entry found.
+    """
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if key == "coordinate_transformations" and isinstance(value, list):
+                yield from (item for item in value if isinstance(item, dict))
+            else:
+                yield from _iter_transforms(value)
+    elif isinstance(payload, list):
+        for item in payload:
+            yield from _iter_transforms(item)
 
 
 def _node_fields(line: str, path: Path) -> list[str]:

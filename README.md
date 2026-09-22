@@ -13,9 +13,10 @@ Two resampling passes, both at 10 µm by default:
 Specimen coordinates are voxels on an anisotropic grid (`[0.748, 0.748, 1.0]` µm for
 exaSPIM_794492), so resampling them directly would space nodes differently along each
 axis. The pass therefore runs on the physical-coordinate reconstructions and converts the
-result back to voxels. The scale is derived from a matched voxel/world pair rather than
-read from `acquisition.json`, which is not mounted into this stage; the derivation is
-self-checking, since the same ratio must hold on every axis for every node.
+result back to voxels. The scale is read from `acquisition.json`, which the transform stage needs for the
+registration and carries forward. If it is absent, the same numbers are derived from a
+matched voxel/world pair; that fallback is self-checking, since the same ratio must hold
+on every axis for every node. Both paths were verified to agree on exaSPIM_794492.
 
 A reconstruction that fails to annotate is logged and skipped; the failed stems are
 recorded in the stage metadata and the capsule exits non-zero. Pass `--fail-fast` to abort
