@@ -2,19 +2,17 @@
 
 Two resampling passes, both at 10 um:
 
-* **CCF space** — the aligned reconstructions, then annotated with CCF structure ids and
-  written as MouseLight JSON.
+* **CCF space** — the aligned reconstructions.
 * **Specimen space** — resampled in *physical* coordinates and converted back to voxels.
   Specimen coordinates are voxels on an anisotropic grid, so resampling them directly
   would space nodes differently along each axis; see :mod:`scale`.
 
-Code Ocean glue around ``neuron-tracing-utils`` and ``aind-morphology-utils``. Their
-pinned numeric stack keeps them out of the shared library, which supplies the stage
-metadata record.
+Code Ocean glue around ``neuron-tracing-utils``, whose resampling reads each SWC into an
+SNT ``Tree`` and so needs a JVM and the Fiji jars. That stack keeps it out of the shared
+library, which supplies the stage metadata record.
 """
 
 import argparse
-import json
 import logging
 import os
 import shutil
@@ -23,10 +21,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from aind_morphology_utils.ccf_annotation import CCFMorphologyMapper
-from aind_morphology_utils.utils import read_swc
-from aind_morphology_utils.writers import MouseLightJsonWriter
-from exaspim_swc_processing.naming import ReconstructionNameError, parse_stem
 from exaspim_swc_processing.stage import (
     UPSTREAM_STAGES,
     build_stage_process,
@@ -60,13 +54,7 @@ def parse_args() -> argparse.Namespace:
         default=float(os.environ.get("NODE_SPACING_UM", DEFAULT_SPACING_UM)),
         help="Node spacing in microns, applied to both coordinate spaces.",
     )
-    parser.add_argument(
-        "--ccf-resolution-um",
-        type=float,
-        default=float(os.environ.get("CCF_RESOLUTION_UM", DEFAULT_SPACING_UM)),
-    )
     parser.add_argument("--experimenters", default=os.environ.get("EXPERIMENTERS", ""))
-    parser.add_argument("--fail-fast", action="store_true")
     return parser.parse_args()
 
 
@@ -196,81 +184,6 @@ def resample_specimen_space(spacing_um: float, output_dir: Path) -> dict[str, ob
     }
 
 
-def id_string(swc_path: Path) -> str:
-    """Build the MouseLight ``idString`` for a reconstruction.
-
-    Keeps the established ``<neuron>-<subject>`` form that downstream consumers expect,
-    but parses the stem properly rather than taking the first two hyphen tokens.
-
-    Parameters
-    ----------
-    swc_path : Path
-        The reconstruction.
-
-    Returns
-    -------
-    str
-        The identifier, falling back to the bare stem if it does not parse.
-    """
-    try:
-        parsed = parse_stem(swc_path.stem)
-    except ReconstructionNameError:
-        return swc_path.stem
-    return f"{parsed.neuron_id}-{parsed.subject_id}"
-
-
-def set_id_string(payload: object, value: str) -> int:
-    """Rewrite every ``idString`` in a MouseLight payload.
-
-    Parameters
-    ----------
-    payload : object
-        The decoded JSON, at any depth.
-    value : str
-        The identifier to set.
-
-    Returns
-    -------
-    int
-        How many fields were rewritten.
-    """
-    count = 0
-    if isinstance(payload, dict):
-        for key, item in payload.items():
-            if key == "idString":
-                payload[key] = value
-                count += 1
-            else:
-                count += set_id_string(item, value)
-    elif isinstance(payload, list):
-        for item in payload:
-            count += set_id_string(item, value)
-    return count
-
-
-def annotate(swc_path: Path, destination: Path, mapper: CCFMorphologyMapper) -> None:
-    """Annotate a CCF-space reconstruction and write it as MouseLight JSON.
-
-    Parameters
-    ----------
-    swc_path : Path
-        CCF-space reconstruction.
-    destination : Path
-        JSON file to write.
-    mapper : CCFMorphologyMapper
-        Maps coordinates to CCF structure ids.
-    """
-    morphology = read_swc(str(swc_path))
-    mapper.annotate_morphology(morphology)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    MouseLightJsonWriter(morphology).write(str(destination))
-    payload = json.loads(destination.read_text(encoding="utf-8"))
-    value = id_string(swc_path)
-    if set_id_string(payload, value) == 0 and isinstance(payload, dict):
-        payload["idString"] = value
-    destination.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
-
 def run() -> int:
     """Resample both coordinate spaces and annotate the CCF outputs.
 
@@ -291,29 +204,15 @@ def run() -> int:
         logger.error("No CCF-space reconstructions found under %s", DATA_DIR)
         return 1
 
-    ccf_out = RESULTS_DIR / "final/ccf_space_reconstructions"
+    ccf_out = RESULTS_DIR / "final/ccf_space_reconstructions/swcs"
     resampled = SCRATCH_DIR / "aligned_resampled"
     resample(aligned_dir, resampled, args.spacing_um)
 
-    mapper = CCFMorphologyMapper(
-        reference_space_key="annotation/ccf_2017",
-        resolution=int(args.ccf_resolution_um),
-        cache_dir=str(SCRATCH_DIR),
-    )
-    failures: list[str] = []
-    annotated = 0
+    ccf_out.mkdir(parents=True, exist_ok=True)
+    ccf_count = 0
     for swc_path in sorted(resampled.glob("*.swc")):
-        destination = ccf_out / "swcs" / swc_path.name
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(swc_path, destination)
-        try:
-            annotate(destination, ccf_out / "jsons" / f"{swc_path.stem}.json", mapper)
-            annotated += 1
-        except Exception as error:  # noqa: BLE001 - one bad cell must not lose the run
-            if args.fail_fast:
-                raise
-            logger.warning("Failed to annotate %s: %s", swc_path.name, error)
-            failures.append(swc_path.stem)
+        shutil.copy(swc_path, ccf_out / swc_path.name)
+        ccf_count += 1
 
     specimen = resample_specimen_space(
         args.spacing_um, RESULTS_DIR / "refinement/final-voxel-resampled"
@@ -328,14 +227,9 @@ def run() -> int:
             ),
             start_time=started,
             output_path="final",
-            parameters={
-                "spacing_um": args.spacing_um,
-                "ccf_resolution_um": args.ccf_resolution_um,
-            },
+            parameters={"spacing_um": args.spacing_um},
             output_parameters={
-                "ccf_swc_count": annotated + len(failures),
-                "ccf_json_count": annotated,
-                "failed": failures,
+                "ccf_swc_count": ccf_count,
                 "stages_carried_forward": carried,
                 **specimen,
             },
@@ -345,8 +239,8 @@ def run() -> int:
         RESULTS_DIR / "final",
     )
 
-    logger.info("Annotated %d, failed %d", annotated, len(failures))
-    return 1 if failures else 0
+    logger.info("Resampled %d CCF-space reconstruction(s)", ccf_count)
+    return 0
 
 
 if __name__ == "__main__":

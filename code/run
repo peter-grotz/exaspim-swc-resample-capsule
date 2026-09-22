@@ -3,9 +3,13 @@ set -ex
 
 pip list > /results/pip_list.txt
 
+# neuron_tracing_utils resamples via SNT, so scyjava needs a JVM and the Fiji jars.
+# util/java/__init__.py collects them from $FIJI_PATH/{jars,plugins}; without it scyjava
+# would try to resolve SNT from Maven at run time, which the flag below forbids.
 export JAVA_HOME=/opt/conda/lib/jvm
 export PATH="$JAVA_HOME/bin:$PATH"
 export SCYJAVA_DISABLE_JDK_DOWNLOAD=1
+export FIJI_PATH=/data/Fiji-builds/Fiji.app
 export JAVA_OPTS="--add-opens=java.base/java.lang=ALL-UNNAMED -Xms32g -Xmx32g -Djava.io.tmpdir=/scratch"
 
 python -u run_capsule.py "$@"
