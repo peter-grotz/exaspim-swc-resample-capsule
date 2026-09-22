@@ -27,7 +27,13 @@ from aind_morphology_utils.ccf_annotation import CCFMorphologyMapper
 from aind_morphology_utils.utils import read_swc
 from aind_morphology_utils.writers import MouseLightJsonWriter
 from exaspim_swc_processing.naming import ReconstructionNameError, parse_stem
-from exaspim_swc_processing.stage import build_stage_process, resolve_code, write_stage_process
+from exaspim_swc_processing.stage import (
+    UPSTREAM_STAGES,
+    build_stage_process,
+    carry_forward,
+    resolve_code,
+    write_stage_process,
+)
 from scale import derive_scale, scale_from_acquisition, scale_swc
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
@@ -277,6 +283,9 @@ def run() -> int:
     args = parse_args()
     started = datetime.now(timezone.utc)
 
+    carried = carry_forward(DATA_DIR, RESULTS_DIR, UPSTREAM_STAGES)
+    logger.info("Carried forward: %s", ", ".join(carried) or "nothing")
+
     aligned_dir = find_dir("alignment/aligned_swcs", "aligned_swcs")
     if aligned_dir is None:
         logger.error("No CCF-space reconstructions found under %s", DATA_DIR)
@@ -327,6 +336,7 @@ def run() -> int:
                 "ccf_swc_count": annotated + len(failures),
                 "ccf_json_count": annotated,
                 "failed": failures,
+                "stages_carried_forward": carried,
                 **specimen,
             },
             experimenters=[e.strip() for e in args.experimenters.split(",") if e.strip()],
