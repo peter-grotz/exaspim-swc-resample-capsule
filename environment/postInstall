@@ -16,10 +16,13 @@ mamba install -y openjdk=21 pyimagej==1.6.0 scyjava==1.12.0
 # cache is just files, so remove it directly.
 rm -rf /opt/conda/pkgs/* /root/.cache/mamba /root/.cache/conda
 
+# jgo is pinned because scyjava 1.12.0 requires it with no upper bound, and jgo 3.0.0
+# removed maven_scijava_repository, which scyjava imports at startup. On Python 3.11
+# pip otherwise installs jgo 3.x and resample fails before reading a single SWC.
 # The library is pinned to a commit, not a branch: the layer is keyed on the text of
 # this command, so '@dev' would reuse a cached layer and silently install nothing
 # new. Bump the SHA whenever the library changes.
 pip install --no-cache-dir \
-  boto3==1.41.5 botocore==1.41.5 aiobotocore==2.26.0 \
+  boto3==1.41.5 botocore==1.41.5 aiobotocore==2.26.0 jgo==2.2.0 \
   "git+https://github.com/AllenNeuralDynamics/neuron-tracing-utils.git@f1cf99eb9767c0eb345166ea216c7c6b3fa6ccab" \
   "exaspim-swc-processing @ git+https://github.com/peter-grotz/exaspim-swc-processing.git@dbfbb6543421f4271210067dd3e16514c296dae5"
