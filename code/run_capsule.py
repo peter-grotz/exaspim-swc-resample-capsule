@@ -21,6 +21,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from exaspim_swc_processing.resources import log_peak_memory
 from exaspim_swc_processing.stage import (
     UPSTREAM_STAGES,
     build_stage_process,
@@ -240,6 +241,7 @@ def run() -> int:
     )
 
     logger.info("Resampled %d CCF-space reconstruction(s)", ccf_count)
+    log_peak_memory()
     return 0
 
 
