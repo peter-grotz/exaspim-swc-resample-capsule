@@ -10,6 +10,13 @@ export JAVA_HOME=/opt/conda/lib/jvm
 export PATH="$JAVA_HOME/bin:$PATH"
 export SCYJAVA_DISABLE_JDK_DOWNLOAD=1
 export FIJI_PATH=/data/Fiji-builds/Fiji.app
-export JAVA_OPTS="--add-opens=java.base/java.lang=ALL-UNNAMED -Xms32g -Xmx32g -Djava.io.tmpdir=/scratch"
+# Heap sized from the data, not inherited. The largest specimen-space reconstruction in
+# run ae8edfbf is 33 MB of text, about 600k nodes; SNT holds one Tree at a time, so a
+# loaded tree is a few hundred MB. 8 GB is ample and leaves the container far smaller.
+#
+# -Xms is deliberately small: the previous -Xms32g -Xmx32g preallocated 32 GB at JVM
+# start, so the stage could not run in a container smaller than that regardless of what
+# it used.
+export JAVA_OPTS="--add-opens=java.base/java.lang=ALL-UNNAMED -Xms1g -Xmx8g -Djava.io.tmpdir=/scratch"
 
 python -u run_capsule.py "$@"
