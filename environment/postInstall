@@ -9,7 +9,12 @@ mamba install -y python=3.11
 
 # JVM for scyjava / SNT, used by neuron-tracing-utils.
 mamba install -y openjdk=21 pyimagej==1.6.0 scyjava==1.12.0
-mamba clean -afy
+
+# Not "mamba clean": the transaction above upgrades libxml2 in the base environment,
+# and libmambapy ships with the base image linked against the old libxml2.so.2, so any
+# further mamba call dies with an ImportError and set -e fails the build. The package
+# cache is just files, so remove it directly.
+rm -rf /opt/conda/pkgs/* /root/.cache/mamba /root/.cache/conda
 
 pip install --no-cache-dir \
   boto3==1.41.5 botocore==1.41.5 aiobotocore==2.26.0 \
