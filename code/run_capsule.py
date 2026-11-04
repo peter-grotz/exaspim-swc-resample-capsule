@@ -7,9 +7,6 @@ Two resampling passes, both at 10 um:
   Specimen coordinates are voxels on an anisotropic grid, so resampling them directly
   would space nodes differently along each axis; see :mod:`scale`.
 
-Code Ocean glue around ``neuron-tracing-utils``, whose resampling reads each SWC into an
-SNT ``Tree`` and so needs a JVM and the Fiji jars. That stack keeps it out of the shared
-library, which supplies the stage metadata record.
 """
 
 import argparse
