@@ -3,9 +3,7 @@
 Two resampling passes, both at 10 um:
 
 * **CCF space** — the aligned reconstructions.
-* **Specimen space** — resampled in *physical* coordinates and converted back to voxels.
-  Specimen coordinates are voxels on an anisotropic grid, so resampling them directly
-  would space nodes differently along each axis; see :mod:`scale`.
+* **Specimen space** — the refined reconstructions in physical coordinates.
 
 """
 
@@ -25,7 +23,6 @@ from exaspim_swc_processing.stage import (
     resolve_code,
     write_stage_process,
 )
-from scale import derive_scale, scale_from_acquisition, scale_swc
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 RESULTS_DIR = Path(os.environ.get("RESULTS_DIR", "/results"))
@@ -104,81 +101,29 @@ def find_dir(*candidates: str) -> Path | None:
     return None
 
 
-def matched_pair(voxel_dir: Path, world_dir: Path) -> tuple[Path, Path]:
-    """Find one reconstruction present in both coordinate spaces.
-
-    Parameters
-    ----------
-    voxel_dir : Path
-        Directory of voxel-space reconstructions.
-    world_dir : Path
-        Directory of physical-space reconstructions.
-
-    Returns
-    -------
-    tuple[Path, Path]
-        The voxel and physical forms of the same reconstruction.
-
-    Raises
-    ------
-    FileNotFoundError
-        If no stem appears in both directories.
-    """
-    for voxel in sorted(voxel_dir.glob("*.swc")):
-        world = world_dir / voxel.name
-        if world.is_file():
-            return voxel, world
-    raise FileNotFoundError(
-        f"No reconstruction appears in both {voxel_dir} and {world_dir}; "
-        "cannot derive the voxel scale"
-    )
-
-
-def resample_specimen_space(spacing_um: float, output_dir: Path) -> dict[str, object]:
-    """Resample specimen-space reconstructions at a physical spacing.
-
-    Resampling runs on the physical-coordinate forms so the spacing is isotropic in
-    microns, then the result is converted back to voxels for publication.
+def resample_specimen_space(spacing_um: float, output_dir: Path) -> int:
+    """Resample the physical-coordinate specimen-space reconstructions.
 
     Parameters
     ----------
     spacing_um : float
         Target spacing between nodes, in microns.
     output_dir : Path
-        Directory to write voxel-space resampled reconstructions to.
+        Directory to write the resampled reconstructions to.
 
     Returns
     -------
-    dict[str, object]
-        Facts for the stage record: the scale used and how many were written.
+    int
+        How many were written.
     """
-    voxel_dir = find_dir("refinement/final-voxel", "swc_refinement/final-voxel", "final-voxel")
     world_dir = find_dir("refinement/final-world", "swc_refinement/final-world", "final-world")
-    if voxel_dir is None or world_dir is None:
+    if world_dir is None:
         logger.warning("Specimen-space inputs not found; skipping specimen resampling")
-        return {"specimen_resampled": 0, "voxel_scale_um": None, "voxel_scale_source": None}
-
-    # The transform stage carries acquisition.json forward; prefer it over inference.
-    scale = scale_from_acquisition(DATA_DIR / "alignment" / "acquisition.json")
-    source = "acquisition"
-    if scale is None:
-        scale = derive_scale(*matched_pair(voxel_dir, world_dir))
-        source = "derived"
-    staging = SCRATCH_DIR / "specimen_resampled_world"
-    resample(world_dir, staging, spacing_um)
-
-    inverse = tuple(1.0 / factor for factor in scale)
-    written = 0
-    for resampled in sorted(staging.glob("*.swc")):
-        scale_swc(resampled, output_dir / resampled.name, inverse)
-        written += 1
-    shutil.rmtree(staging, ignore_errors=True)
+        return 0
+    resample(world_dir, output_dir, spacing_um)
+    written = len(list(output_dir.glob("*.swc")))
     logger.info("Resampled %d specimen-space reconstruction(s) at %s um", written, spacing_um)
-    return {
-        "specimen_resampled": written,
-        "voxel_scale_um": list(scale),
-        "voxel_scale_source": source,
-    }
+    return written
 
 
 def run() -> int:
@@ -211,11 +156,7 @@ def run() -> int:
         shutil.copy(swc_path, ccf_out / swc_path.name)
         ccf_count += 1
 
-    specimen = resample_specimen_space(
-        args.spacing_um, RESULTS_DIR / "refinement/final-voxel-resampled"
-    )
-
-    logger.info("Specimen space: %s", specimen)
+    resample_specimen_space(args.spacing_um, RESULTS_DIR / "refinement/final-world-resampled")
     write_stage_process(
         build_stage_process(
             STEP_NAME,
