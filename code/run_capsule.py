@@ -7,9 +7,6 @@ Two resampling passes, both at 10 um:
   Specimen coordinates are voxels on an anisotropic grid, so resampling them directly
   would space nodes differently along each axis; see :mod:`scale`.
 
-Code Ocean glue around ``neuron-tracing-utils``, whose resampling reads each SWC into an
-SNT ``Tree`` and so needs a JVM and the Fiji jars. That stack keeps it out of the shared
-library, which supplies the stage metadata record.
 """
 
 import argparse
@@ -218,23 +215,13 @@ def run() -> int:
         args.spacing_um, RESULTS_DIR / "refinement/final-voxel-resampled"
     )
 
+    logger.info("Specimen space: %s", specimen)
     write_stage_process(
         build_stage_process(
             STEP_NAME,
-            resolve_code(
-                "exaspim-swc-resample",
-                url="https://github.com/peter-grotz/exaspim-swc-resample-capsule",
-            ),
-            start_time=started,
-            output_path="final",
-            parameters={"spacing_um": args.spacing_um},
-            output_parameters={
-                "ccf_swc_count": ccf_count,
-                "stages_carried_forward": carried,
-                **specimen,
-            },
+            resolve_code(url="https://github.com/peter-grotz/exaspim-swc-resample-capsule"),
+            started,
             experimenters=[e.strip() for e in args.experimenters.split(",") if e.strip()],
-            notes=f"Resampled both coordinate spaces at {args.spacing_um} um.",
         ),
         RESULTS_DIR / "final",
     )
