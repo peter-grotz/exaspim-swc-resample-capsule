@@ -1,28 +1,24 @@
 #!/usr/bin/env bash
 set -ex
 
-# aind-morphology-utils pins allensdk==2.16.2, which caps numpy<1.24; numpy 1.23.5 cannot
-# build on Python 3.12 because it needs distutils. Step down to 3.11.
-# The only mambaforge3 tags observed in this deployment are python3.10.12 and
-# python3.12.4; if a 3.11 tag exists, use it directly and drop this.
-mamba install -y python=3.11
+# Python 3.11 and the JVM go in their own environment. Changing the base environment's
+# Python replaces libraries mamba itself is linked against, which breaks every later
+# mamba call. aind-morphology-utils needs numpy<1.24, which cannot build on 3.12.
+mamba create -y -n morphology -c conda-forge \
+  python=3.11 \
+  pip \
+  openjdk=21 \
+  pyimagej==1.6.0 \
+  scyjava==1.12.0
 
-# JVM for scyjava / SNT, used by neuron-tracing-utils.
-mamba install -y openjdk=21 pyimagej==1.6.0 scyjava==1.12.0
+mamba clean -afy
 
-# Not "mamba clean": the transaction above upgrades libxml2 in the base environment,
-# and libmambapy ships with the base image linked against the old libxml2.so.2, so any
-# further mamba call dies with an ImportError and set -e fails the build. The package
-# cache is just files, so remove it directly.
-rm -rf /opt/conda/pkgs/* /root/.cache/mamba /root/.cache/conda
-
-# jgo is pinned because scyjava 1.12.0 requires it with no upper bound, and jgo 3.0.0
-# removed maven_scijava_repository, which scyjava imports at startup. On Python 3.11
-# pip otherwise installs jgo 3.x and resample fails before reading a single SWC.
-# The library is pinned to a commit, not a branch: the layer is keyed on the text of
-# this command, so '@dev' would reuse a cached layer and silently install nothing
-# new. Bump the SHA whenever the library changes.
-pip install --no-cache-dir \
-  boto3==1.41.5 botocore==1.41.5 aiobotocore==2.26.0 jgo==2.2.0 \
+# jgo<3: scyjava 1.12.0 imports maven_scijava_repository, which jgo 3 removed.
+# The library is pinned to a commit so a cached layer cannot hide a change.
+/opt/conda/envs/morphology/bin/python -m pip install --no-cache-dir \
+  boto3==1.41.5 \
+  botocore==1.41.5 \
+  aiobotocore==2.26.0 \
+  jgo==2.2.0 \
   "git+https://github.com/AllenNeuralDynamics/neuron-tracing-utils.git@f1cf99eb9767c0eb345166ea216c7c6b3fa6ccab" \
   "exaspim-swc-processing @ git+https://github.com/peter-grotz/exaspim-swc-processing.git@946f7a47c975fdcb189f6e60163d8125741227dd"
