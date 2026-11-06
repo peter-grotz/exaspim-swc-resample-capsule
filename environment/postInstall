@@ -21,4 +21,4 @@ mamba clean -afy
   aiobotocore==2.26.0 \
   jgo==2.2.0 \
   "git+https://github.com/AllenNeuralDynamics/neuron-tracing-utils.git@f1cf99eb9767c0eb345166ea216c7c6b3fa6ccab" \
-  "exaspim-swc-processing @ git+https://github.com/peter-grotz/exaspim-swc-processing.git@946f7a47c975fdcb189f6e60163d8125741227dd"
+  "exaspim-swc-processing @ git+https://github.com/AllenNeuralDynamics/exaspim-swc-processing.git@946f7a47c975fdcb189f6e60163d8125741227dd"
