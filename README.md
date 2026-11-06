@@ -22,5 +22,5 @@ on the first failure.
 ## Installation
 
 Stage metadata and stem parsing come from
-[exaspim-swc-processing](https://github.com/peter-grotz/exaspim-swc-processing). The JVM
+[exaspim-swc-processing](https://github.com/AllenNeuralDynamics/exaspim-swc-processing). The JVM
 and pinned numeric stack stay here.
